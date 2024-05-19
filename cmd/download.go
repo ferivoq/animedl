@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -70,20 +71,46 @@ var downloadCmd = &cobra.Command{
 			}
 			animeID := match[1]
 
+			// Fetch and select quality for the first episode
+			playerURL := fmt.Sprintf("https://player.animedrive.hu/player_v1.5.php?id=%s&ep=1", animeID)
+			animeName, err := utils.FetchAnimeName(fmt.Sprintf("https://animedrive.hu/watch/?id=%s&ep=1", animeID), headers)
+			if err != nil {
+				fmt.Printf("❌ Error fetching anime name: %v\n", err)
+				return
+			}
+			playerHeaders, err := config.LoadHeaders("headers.json", "playerHeaders")
+			if err != nil {
+				fmt.Printf("❌ Error loading playerHeaders: %v\n", err)
+				return
+			}
+
+			selectedQuality, selectedSourceURL, err := utils.FetchAndSelectQuality(playerURL, playerHeaders)
+			if err != nil {
+				fmt.Printf("❌ Error selecting quality: %v\n", err)
+				return
+			}
+
+			// Create folder for the anime
+			animeFolder := fmt.Sprintf("%s/%s", baseFolder, animeName)
+			if _, err := os.Stat(animeFolder); os.IsNotExist(err) {
+				err = os.Mkdir(animeFolder, os.ModePerm)
+				if err != nil {
+					fmt.Printf("❌ Error creating folder: %v\n", err)
+					return
+				}
+			}
+
+			// Download the selected quality for all episodes
 			for i := 1; i <= numEpisodes; i++ {
-				playerURL := fmt.Sprintf("https://player.animedrive.hu/player_v1.5.php?id=%s&ep=%d", animeID, i)
-				fmt.Printf("🌐 Downloading episode %d: %s\n", i, playerURL)
-				animeName, err := utils.FetchAnimeName(fmt.Sprintf("https://animedrive.hu/watch/?id=%s&ep=%d", animeID, i), headers)
+				episodeURL := fmt.Sprintf("https://player.animedrive.hu/player_v1.5.php?id=%s&ep=%d", animeID, i)
+				fmt.Printf("🌐 Downloading episode %d: %s\n", i, episodeURL)
+				episodeFileName := fmt.Sprintf("%s/%s - Episode %d - %s.mp4", animeFolder, animeName, i, selectedQuality)
+				err := utils.DownloadFile(episodeFileName, selectedSourceURL, playerHeaders)
 				if err != nil {
-					fmt.Printf("❌ Error fetching anime name: %v\n", err)
-					return
+					fmt.Printf("❌ Error downloading episode %d: %v\n", i, err)
+				} else {
+					fmt.Printf("✅ Episode %d downloaded successfully!\n", i)
 				}
-				playerHeaders, err := config.LoadHeaders("headers.json", "playerHeaders")
-				if err != nil {
-					fmt.Printf("❌ Error loading playerHeaders: %v\n", err)
-					return
-				}
-				utils.FetchAndDownload(playerURL, playerHeaders, baseFolder, fmt.Sprintf("%d", i), animeName)
 			}
 
 		} else if strings.Contains(url, "animedrive.hu/watch/?id=") {
@@ -108,7 +135,27 @@ var downloadCmd = &cobra.Command{
 					}
 					fmt.Printf("📺 Anime: %s\n", animeName)
 					playerURL := fmt.Sprintf("https://player.animedrive.hu/player_v1.5.php?id=%s&ep=%s", id, ep)
-					utils.FetchAndDownload(playerURL, headers, baseFolder, ep, animeName)
+					selectedQuality, selectedSourceURL, err := utils.FetchAndSelectQuality(playerURL, headers)
+					if err != nil {
+						fmt.Printf("❌ Error selecting quality: %v\n", err)
+						return
+					}
+					// Create folder for the anime
+					animeFolder := fmt.Sprintf("%s/%s", baseFolder, animeName)
+					if _, err := os.Stat(animeFolder); os.IsNotExist(err) {
+						err = os.Mkdir(animeFolder, os.ModePerm)
+						if err != nil {
+							fmt.Printf("❌ Error creating folder: %v\n", err)
+							return
+						}
+					}
+					episodeFileName := fmt.Sprintf("%s/%s - Episode %s - %s.mp4", animeFolder, animeName, ep, selectedQuality)
+					err = utils.DownloadFile(episodeFileName, selectedSourceURL, headers)
+					if err != nil {
+						fmt.Printf("❌ Error downloading episode %s: %v\n", ep, err)
+					} else {
+						fmt.Printf("✅ Episode %s downloaded successfully!\n", ep)
+					}
 					return
 				} else {
 					fmt.Println("❌ Error: wrong URL format for watch URL")

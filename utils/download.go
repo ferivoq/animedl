@@ -12,11 +12,36 @@ import (
 )
 
 func FetchAndDownload(url string, headers map[string]string, baseFolder, ep, animeName string) {
+	selectedQuality, selectedSourceURL, err := FetchAndSelectQuality(url, headers)
+	if err != nil {
+		fmt.Printf("❌ Error selecting quality: %v\n", err)
+		return
+	}
+
+	animeFolder := filepath.Join(baseFolder, animeName)
+	if _, err := os.Stat(animeFolder); os.IsNotExist(err) {
+		err = os.Mkdir(animeFolder, os.ModePerm)
+		if err != nil {
+			fmt.Printf("❌ Error creating folder: %v\n", err)
+			return
+		}
+	}
+
+	filename := fmt.Sprintf("%s - Episode %s - %s.mp4", animeName, ep, selectedQuality)
+	filePath := filepath.Join(animeFolder, filename)
+	err = DownloadFile(filePath, selectedSourceURL, headers)
+	if err != nil {
+		fmt.Printf("❌ Error downloading file: %v\n", err)
+	} else {
+		fmt.Println("✅ Download completed!")
+	}
+}
+
+func FetchAndSelectQuality(url string, headers map[string]string) (string, string, error) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		fmt.Printf("❌ Error creating request: %v\n", err)
-		return
+		return "", "", fmt.Errorf("error creating request: %v", err)
 	}
 
 	for key, value := range headers {
@@ -25,22 +50,19 @@ func FetchAndDownload(url string, headers map[string]string, baseFolder, ep, ani
 
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Printf("❌ Error making request: %v\n", err)
-		return
+		return "", "", fmt.Errorf("error making request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("❌ Error reading response body: %v\n", err)
-		return
+		return "", "", fmt.Errorf("error reading response body: %v", err)
 	}
 
 	htmlData := string(body)
 	sources := ScrapeSources(htmlData)
 	if len(sources) == 0 {
-		fmt.Println("❌ No sources found")
-		return
+		return "", "", fmt.Errorf("no sources found")
 	}
 
 	// Prompt user to select quality
@@ -57,30 +79,13 @@ func FetchAndDownload(url string, headers map[string]string, baseFolder, ep, ani
 
 	i, _, err := prompt.Run()
 	if err != nil {
-		fmt.Printf("❌ Prompt failed %v\n", err)
-		return
+		return "", "", fmt.Errorf("prompt failed: %v", err)
 	}
 
 	selectedSource := sources[i]
-	fmt.Printf("📥 Downloading %s quality...\n", selectedSource.Quality)
+	fmt.Printf("📥 Selected quality: %s\n", selectedSource.Quality)
 
-	animeFolder := filepath.Join(baseFolder, animeName)
-	if _, err := os.Stat(animeFolder); os.IsNotExist(err) {
-		err = os.Mkdir(animeFolder, os.ModePerm)
-		if err != nil {
-			fmt.Printf("❌ Error creating folder: %v\n", err)
-			return
-		}
-	}
-
-	filename := fmt.Sprintf("%s - %s.mp4", ep, animeName)
-	filePath := filepath.Join(animeFolder, filename)
-	err = DownloadFile(filePath, selectedSource.URL, headers)
-	if err != nil {
-		fmt.Printf("❌ Error downloading file: %v\n", err)
-	} else {
-		fmt.Println("✅ Download completed!")
-	}
+	return selectedSource.Quality, selectedSource.URL, nil
 }
 
 func DownloadFile(filepath string, url string, headers map[string]string) error {
