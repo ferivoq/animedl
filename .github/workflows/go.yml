@@ -44,7 +44,7 @@ jobs:
           GOOS: ${{ matrix.GOOS }}
           GOARCH: ${{ matrix.GOARCH }}
         run: |
-          go build -o animedrive-dl-${{ matrix.GOOS }}-${{ matrix.GOARCH }} ./...
+          go build -o animedrive-dl-${{ matrix.GOOS }}-${{ matrix.GOARCH }} ./main.go
 
       - name: Test
         run: go test ./...
