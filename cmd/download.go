@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"animedrive-dl/config"
 	"animedrive-dl/utils"
 
 	"github.com/manifoldco/promptui"
@@ -22,20 +21,18 @@ var downloadCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		url := args[0]
 		baseFolder := args[1]
-		var headers map[string]string
-		var err error
 
 		fmt.Println("🔗 Parsing URL...")
 
 		if strings.Contains(url, "animedrive.hu/anime/?id=") {
-			headers, err = config.LoadHeaders("headers.json", "baseHeaders")
-			if err != nil {
-				fmt.Printf("❌ Error loading baseHeaders: %v\n", err)
+			baseHeaders, ok := headers["baseHeaders"]
+			if !ok {
+				fmt.Println("❌ Error: baseHeaders not found")
 				return
 			}
 
 			fmt.Println("📡 Fetching number of episodes...")
-			episodes, err := utils.FetchNumberOfEpisodes(url, headers)
+			episodes, err := utils.FetchNumberOfEpisodes(url, baseHeaders)
 			if err != nil {
 				fmt.Printf("❌ Error fetching number of episodes: %v\n", err)
 				return
@@ -73,14 +70,14 @@ var downloadCmd = &cobra.Command{
 
 			// Fetch and select quality for the first episode
 			playerURL := fmt.Sprintf("https://player.animedrive.hu/player_v1.5.php?id=%s&ep=1", animeID)
-			animeName, err := utils.FetchAnimeName(fmt.Sprintf("https://animedrive.hu/watch/?id=%s&ep=1", animeID), headers)
+			animeName, err := utils.FetchAnimeName(fmt.Sprintf("https://animedrive.hu/watch/?id=%s&ep=1", animeID), baseHeaders)
 			if err != nil {
 				fmt.Printf("❌ Error fetching anime name: %v\n", err)
 				return
 			}
-			playerHeaders, err := config.LoadHeaders("headers.json", "playerHeaders")
-			if err != nil {
-				fmt.Printf("❌ Error loading playerHeaders: %v\n", err)
+			playerHeaders, ok := headers["playerHeaders"]
+			if !ok {
+				fmt.Println("❌ Error: playerHeaders not found")
 				return
 			}
 
@@ -114,9 +111,9 @@ var downloadCmd = &cobra.Command{
 			}
 
 		} else if strings.Contains(url, "animedrive.hu/watch/?id=") {
-			headers, err = config.LoadHeaders("headers.json", "playerHeaders")
-			if err != nil {
-				fmt.Printf("❌ Error loading playerHeaders: %v\n", err)
+			playerHeaders, ok := headers["playerHeaders"]
+			if !ok {
+				fmt.Println("❌ Error: playerHeaders not found")
 				return
 			}
 
@@ -128,14 +125,14 @@ var downloadCmd = &cobra.Command{
 					id := match[1]
 					ep := match[2]
 					fmt.Println("📡 Fetching anime name...")
-					animeName, err := utils.FetchAnimeName(url, headers)
+					animeName, err := utils.FetchAnimeName(url, playerHeaders)
 					if err != nil {
 						fmt.Printf("❌ Error fetching anime name: %v\n", err)
 						return
 					}
 					fmt.Printf("📺 Anime: %s\n", animeName)
 					playerURL := fmt.Sprintf("https://player.animedrive.hu/player_v1.5.php?id=%s&ep=%s", id, ep)
-					selectedQuality, selectedSourceURL, err := utils.FetchAndSelectQuality(playerURL, headers)
+					selectedQuality, selectedSourceURL, err := utils.FetchAndSelectQuality(playerURL, playerHeaders)
 					if err != nil {
 						fmt.Printf("❌ Error selecting quality: %v\n", err)
 						return
@@ -150,7 +147,7 @@ var downloadCmd = &cobra.Command{
 						}
 					}
 					episodeFileName := fmt.Sprintf("%s/%s - Episode %s - %s.mp4", animeFolder, animeName, ep, selectedQuality)
-					err = utils.DownloadFile(episodeFileName, selectedSourceURL, headers)
+					err = utils.DownloadFile(episodeFileName, selectedSourceURL, playerHeaders)
 					if err != nil {
 						fmt.Printf("❌ Error downloading episode %s: %v\n", ep, err)
 					} else {
